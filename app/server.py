@@ -1,5 +1,5 @@
 from redis_singleton import redis_connection_instance
-from app import IOProcess
+from app import Application
 import tornado.ioloop
 import tornado.web
 import random
@@ -14,15 +14,16 @@ class MainHandler(tornado.web.RequestHandler) :
 
     def post(self) -> None :    
         data = json.loads(self.request.body.decode("utf-8"))
-        hash_key = IOProcess(redis).store(**data)
+        hash_key = Application(redis).store_data(**data)
         self.write(self.request.host + "/%s"%hash_key)
         
         
 class PatternRedirectHandler(tornado.web.RequestHandler) : 
 
     def get(self, path) -> None :
-        target = IOProcess(redis).fetch(path)
-        self.redirect(target['url'])
+        target = Application(redis).get_url(path)
+        target = target if target else '/'
+        self.redirect(target)
 
 class PathNotFoundHandler(tornado.web.RequestHandler) :
     def prepare(self):
