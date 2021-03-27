@@ -1,6 +1,5 @@
 import redis 
 import os
-import config
 
 class redis_connection_instance(object) :
     def __new__(self) :

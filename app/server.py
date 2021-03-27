@@ -1,11 +1,16 @@
-from redis_singleton import redis_connection_instance
-from app import Application
+
 import tornado.ioloop
 import tornado.web
 import random
 import json
 import re
 import os
+
+import sys
+sys.path.append('/util')
+import util.config
+from util.redis_singleton import redis_connection_instance
+from util.app import Application
 
 redis = redis_connection_instance()
 
