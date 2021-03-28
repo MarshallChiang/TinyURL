@@ -1,7 +1,9 @@
 import os
+import re
 import json 
 import hashlib
 import datetime
+from urllib.parse import urlparse
 from typing import Optional
 
 '''
@@ -41,6 +43,14 @@ class MiddleWare :
     def fetch(self, key) -> str :
         return self.redis_instance.hgetall(key)
 
+class ProtocolObject :
+    
+    def __init__(self, output : str, message : str = "" ) :
+        self.output = output
+        self.message = message
+
+    def extract(self) :
+        return json.dumps(self.__dict__)
 
 
 class Application(MiddleWare) :
@@ -49,11 +59,16 @@ class Application(MiddleWare) :
         super().__init__(redis_instance)
     
     def get_url(self, key: str) -> Optional[str] :
-        result = self.fetch(key)
-        return result if not result else result["url"]
+        output = self.fetch(key)
+        message = "" if output else "Unable to find URL to redirect to."
+        return ProtocolObject(output, message=message)
     
     def store_data(self, **kwargs) -> str :
-        return self.store("url", **kwargs)
+        s = urlparse(kwargs["url"])
+        if not (s.scheme and s.path) :
+            return ProtocolObject("", message="Incorrect format of input URL.")
+        else :
+            return ProtocolObject(self.store("url", **kwargs))
         
         
         
