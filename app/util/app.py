@@ -4,72 +4,145 @@ import json
 import hashlib
 import datetime
 from urllib.parse import urlparse
-from typing import Optional
+from typing import Optional, final
 
+import config
 '''
 retreive connected redis instance in pool to excute command.
 '''
 
-max_retry = os.environ["collision_retry_threshold"]
+max_retry = int(os.environ["collision_retry_threshold"])
 hash_func = os.environ["hash_func"]
 hash_len = int(os.environ["key_length"])
+
+
+class ProtocolObject :
+    
+    def __init__(self, output : str = None, messages : list = None) :
+
+        self.output = output
+        self.message = messages
+
+    def extract(self) :
+        print(self.__dict__)
+        return json.dumps(self.__dict__)
+
+    @classmethod
+    def convert(self, f) :
+        def function_wrapper(*args, **kwargs) :
+            
+            output, message = f(*args, **kwargs) 
+            return ProtocolObject(output=output, messages=message)
+
+        return function_wrapper
+    
+    def appendErrors(self, errors) :
+
+        self.message.append(errors)  
 
 class MiddleWare :
 
     def __init__(self, redis_instance) -> None :
+
         self.redis_instance = redis_instance
     
-    def __hashkey__(self, key) -> str:
+    def __hashkey__(self, key : str) -> str:
+
         hash_func = getattr(hashlib, os.environ["hash_func"])
         salt = datetime.datetime.now().strftime('%s')
+
         return hash_func((key + salt).encode()).hexdigest()[:hash_len]
-
-
-    def store(self, hash_on: str, **kwargs) -> str :
-        assert hash_on in kwargs, "%s doesn't exist"%hash_on 
-        retry_threshold = int(max_retry)
-        retry = 0
-        while  retry < retry_threshold:    
-            store_key = self.__hashkey__(kwargs[hash_on])
-            if self.redis_instance.hsetnx(store_key, hash_on, kwargs[hash_on]) : 
-                self.update(store_key, **kwargs)
-                break
-            retry += 1
-        return store_key
-
-    def update(self, key, **kwargs) -> int :
-        return self.redis_instance.hset(key, mapping=kwargs)
-
-    def fetch(self, key) -> str :
-        return self.redis_instance.hgetall(key)
-
-class ProtocolObject :
     
-    def __init__(self, output : str, message : str = "" ) :
-        self.output = output
-        self.message = message
+    def __collision_check__(self, key: str) -> str:
 
-    def extract(self) :
-        return json.dumps(self.__dict__)
+        return self.redis_instance.exists(key)
+
+    def gen_hash(self, key : str) -> str :
+
+        key = self.__hashkey__(key)
+
+        while self.__collision_check__(key) :
+            key = self.__hashkey__(key)
+
+        return key
+    
+    @ProtocolObject.convert
+    def store(self, key:str, data, required_hash: bool=False) -> str :
+
+        key, message = key, ""
+        
+        try :
+            if required_hash :
+                key = self.gen_hash(key)
+
+            if isinstance(data, (str, int)) :
+                self.redis_instance.set(key, data)
+
+            elif isinstance(data, list) :
+                self.redis_instance.lpush(key, data)
+
+            elif isinstance(data, dict) :
+                r = self.redis_instance.hset(key, mapping=data)
+
+        except Exception as e :
+            message = e 
+
+        finally :
+            return key, message
+
+    @ProtocolObject.convert
+    def fetch(self, key: str, filters=None) -> str :
+
+        key_type = self.redis_instance.type(key)
+        output, message = None, ""
+
+        try :
+            if key_type == "str" :
+
+                output = self.redis_instance.get(key)
+
+            elif key_type == "list" and isinstance(filters, set): 
+
+                output =  self.redis_instance.lrange(key , filters[0], filters[1])
+
+            elif key_type == "hash" :
+                print('asdf')
+                output = self.redis_instance.hgetall(key)
+
+        except Exception as e :
+
+            message = e
+
+        finally :
+
+            return output, message
 
 
 class Application(MiddleWare) :
 
     def __init__(self, redis_instance) :
+
         super().__init__(redis_instance)
     
     def get_url(self, key: str) -> Optional[str] :
-        output = self.fetch(key)
-        message = "" if output else "Unable to find URL to redirect to."
-        return ProtocolObject(output, message=message)
-    
-    def store_data(self, **kwargs) -> str :
-        s = urlparse(kwargs["url"])
-        if not (s.scheme and s.path) :
-            return ProtocolObject("", message="Incorrect format of input URL.")
-        else :
-            return ProtocolObject(self.store("url", **kwargs))
         
+        return self.fetch(key).extract()
+    
+    def store_data(self, **kwargs) -> ProtocolObject :
+
+        s = urlparse(kwargs["url"])
+
+        if not s.scheme :
+
+            return ProtocolObject("", message="Incorrect format of input URL.")
+
+        if "session_id" not in kwargs :
+
+            return ProtocolObject("", message="Invalid user with no session_id.")
+
+        else :
+            return self.store(kwargs["url"], dict(kwargs), required_hash=True).extract()
+
         
         
 
