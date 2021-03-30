@@ -30,3 +30,22 @@ function dataQueryAjax() {
 function alertReset() {
     $("#error_message").addClass("invisible")
 }
+
+function StatFactory(s, f, c, l, ct) {
+
+    return $("<div>", {"class" : "card"}).append(
+        $("<div>", {"class" : "card-body"}).append(
+            $("<h5>", {"class" : "card-title"}).text(s)
+        ).append(
+            $("<p>", {"class" : "card-text"}).text(f)
+        ).append(
+            $("<div>", {"class" : "d-flex justify-content-between"}).append(
+                $("<span>").text(c)
+            ).append(
+                $("<span>").text(l)
+            ).append(
+                $("<span>").text(ct)
+            ) 
+        )
+    )
+}

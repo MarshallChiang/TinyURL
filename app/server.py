@@ -54,6 +54,7 @@ class PatternRedirectHandler(SessionHandler) :
         result = json.loads(Application(redis).get_url(path))
         if not result["message"] :
             self.redirect(result["output"]["url"])
+            Application(redis)
         else :
             self.redirect("/error?err_msg=%s"%result["message"])
 

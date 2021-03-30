@@ -5,7 +5,6 @@ import hashlib
 import datetime
 from urllib.parse import urlparse
 from typing import Optional, final
-
 '''
 retreive connected redis instance in pool to excute command.
 '''
@@ -116,6 +115,39 @@ class MiddleWare :
 
             return output, message
 
+    def increment(self, key, incrby=1, field=None) :
+
+        key_type = self.redis_instance.type(key)
+        output, message = None, ""
+
+        try :
+
+            if key_type == "str" : 
+
+                if not incrby : 
+
+                    self.redis_instance.incr(key)
+
+                else :
+
+                    self.redis_instance.incrby(key, incrby)
+            
+            elif key_type == "hash" and field:
+
+                self.redis_instance.hincrby(key, field, incrby)
+
+        except Exception as e :
+
+            message = e
+
+        finally :
+
+            return output, message
+
+
+
+            
+
 
 class Application(MiddleWare) :
 
@@ -141,14 +173,18 @@ class Application(MiddleWare) :
 
         else :
             return self.store(kwargs["url"], dict(kwargs), required_hash=True).extract()
+    
+    def pageview(self, key, field=None, incrby=1) :
+        return self.increment(key, field=field, incrby=incrby)
+
+
 
 if __name__ == '__main__' : 
     import redis_singleton, config
     r = redis_singleton.redis_connection_instance()
     store_result = Application(r).store_data(url='https://www.google.com', session_id='123')
     get_result = Application(r).get_url(json.loads(store_result)["output"])
-    print(store_result)
-    print(get_result)
+    add_result = Application(r).pageview(json.loads(store_result)["output"], field="session_id")
 
         
         
