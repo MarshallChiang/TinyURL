@@ -2,10 +2,9 @@
 import tornado.ioloop
 import tornado.template
 import tornado.web
-import random
+import datetime
 import json
 import uuid
-import re
 import os
 import sys
 sys.path.append("/util")
@@ -24,7 +23,10 @@ class SessionHandler(tornado.web.RequestHandler) :
         if not self.get_secure_cookie("session_id") : 
             session = self.__create_session__()
             self.set_secure_cookie("session_id", session)
-        return self.get_secure_cookie("session_id").decode()
+        return {
+            "session_id" : self.get_secure_cookie("session_id").decode(),
+            "timestamp" : datetime.datetime.now().strftime("%s")
+        }
 
     def __create_session__(self) :
         return uuid.uuid4().hex
@@ -39,22 +41,19 @@ class MainHandler(SessionHandler) :
     @tornado.web.authenticated
     def post(self) -> None :    
         data = json.loads(self.request.body)
-        data["session_id"] = self.current_user
-        result = json.loads(Application(redis).store_data(**data).extract())
-        print(result)
-        if not result["message"] :
-            self.write(ProtocolObject(self.request.host + "/%s"%result["output"]).extract())
-        else :
-            self.write(ProtocolObject("", message=result["message"]).extract())
+        data.update(self.current_user)
+        result = json.loads(Application(redis).store_data(**data))
+        result["host"] = self.request.host
+        self.write(json.dumps(result))
         
         
 class PatternRedirectHandler(SessionHandler) : 
 
     @tornado.web.authenticated
     def get(self, path) -> None :
-        result = json.loads(Application(redis).get_url(path).extract())
+        result = json.loads(Application(redis).get_url(path))
         if not result["message"] :
-            self.redirect(result["output"])
+            self.redirect(result["output"]["url"])
         else :
             self.redirect("/error?err_msg=%s"%result["message"])
 

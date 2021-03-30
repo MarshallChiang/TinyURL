@@ -13,13 +13,15 @@ function dataQueryAjax() {
             ),
             complete : function(d) {
                 data = JSON.parse(d.responseText)
+                console.log(data)
                 if (data["message"]) {
                     console.log(data)
                     $("#error_message").removeClass("invisible")
                     $("#error_message").text(data["message"])
                 }
                 else {
-                    $("output").val(data["output"])
+                    console.log("succuess")
+                    $("#output").val(data["host"] + '/' + data["output"])
                 }
             }
         }

@@ -6,7 +6,6 @@ import datetime
 from urllib.parse import urlparse
 from typing import Optional, final
 
-import config
 '''
 retreive connected redis instance in pool to excute command.
 '''
@@ -24,7 +23,7 @@ class ProtocolObject :
         self.message = messages
 
     def extract(self) :
-        print(self.__dict__)
+
         return json.dumps(self.__dict__)
 
     @classmethod
@@ -106,7 +105,7 @@ class MiddleWare :
                 output =  self.redis_instance.lrange(key , filters[0], filters[1])
 
             elif key_type == "hash" :
-                print('asdf')
+
                 output = self.redis_instance.hgetall(key)
 
         except Exception as e :
@@ -134,15 +133,24 @@ class Application(MiddleWare) :
 
         if not s.scheme :
 
-            return ProtocolObject("", message="Incorrect format of input URL.")
+            return ProtocolObject("", messages="Incorrect format of input URL.").extract()
 
         if "session_id" not in kwargs :
 
-            return ProtocolObject("", message="Invalid user with no session_id.")
+            return ProtocolObject("", messages="Invalid user with no session_id.").extract()
 
         else :
             return self.store(kwargs["url"], dict(kwargs), required_hash=True).extract()
 
+if __name__ == '__main__' : 
+    import redis_singleton, config
+    r = redis_singleton.redis_connection_instance()
+    store_result = Application(r).store_data(url='https://www.google.com', session_id='123')
+    get_result = Application(r).get_url(json.loads(store_result)["output"])
+    print(store_result)
+    print(get_result)
+
+        
         
         
 
