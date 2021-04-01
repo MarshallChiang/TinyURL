@@ -18,7 +18,7 @@ function getShortenAjax() {
                     $("#error_message").text(data["message"])
                 }
                 else {
-                    console.log("succuess")
+                    $("#error_message").addClass("invisible")
                     $("#output").val(data["host"] + "/" + data["output"])
                     getStatsAjax(0);
                 }

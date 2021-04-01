@@ -45,7 +45,8 @@ class MainHandler(SessionHandler) :
         result = json.loads(Application(redis).data_store(**data))
         result["host"] = self.request.host
         self.write(json.dumps(result))
-        Application(redis).client_history_update(self.current_user["session_id"], result["output"])
+        if result["output"] :
+            Application(redis).client_history_update(self.current_user["session_id"], result["output"])
 
     
 class StatsHandler(SessionHandler) :
