@@ -65,7 +65,7 @@ class MiddleWare :
         return key
     
     @ProtocolObject.convert
-    def store(self, key:str, data, required_hash: bool=False) -> str :
+    def store(self, key : str, data, required_hash: bool=False) -> str :
 
         key, message = key, ""
         
@@ -77,7 +77,9 @@ class MiddleWare :
                 self.redis_instance.set(key, data)
 
             elif isinstance(data, list) :
-                self.redis_instance.lpush(key, data)
+
+                for d in data :
+                    self.redis_instance.lpush(key, d)
 
             elif isinstance(data, dict) :
                 r = self.redis_instance.hset(key, mapping=data)
@@ -86,36 +88,34 @@ class MiddleWare :
             message = e 
 
         finally :
+
             return key, message
 
     @ProtocolObject.convert
-    def fetch(self, key: str, filters=None) -> str :
+    def fetch(self, key : str, filters : str = None) -> str :
 
         key_type = self.redis_instance.type(key)
         output, message = None, ""
 
         try :
             if key_type == "str" :
-
                 output = self.redis_instance.get(key)
 
-            elif key_type == "list" and isinstance(filters, set): 
-
+            elif key_type == "list" and isinstance(filters, tuple): 
                 output =  self.redis_instance.lrange(key , filters[0], filters[1])
 
             elif key_type == "hash" :
-
                 output = self.redis_instance.hgetall(key)
 
         except Exception as e :
-
             message = e
 
         finally :
 
             return output, message
 
-    def increment(self, key, incrby=1, field=None) :
+    @ProtocolObject.convert
+    def increment(self, key : str, incrby : int = 1, field : str = None) :
 
         key_type = self.redis_instance.type(key)
         output, message = None, ""
@@ -125,26 +125,51 @@ class MiddleWare :
             if key_type == "str" : 
 
                 if not incrby : 
-
-                    self.redis_instance.incr(key)
+                    output = self.redis_instance.incr(key)
 
                 else :
-
-                    self.redis_instance.incrby(key, incrby)
+                    output = self.redis_instance.incrby(key, incrby)
             
             elif key_type == "hash" and field:
-
-                self.redis_instance.hincrby(key, field, incrby)
+                output = self.redis_instance.hincrby(key, field, incrby)
 
         except Exception as e :
-
             message = e
 
         finally :
 
             return output, message
 
+    @ProtocolObject.convert
+    def update(self, key : str, data : str, field : str = None, force_update=False) :
 
+        key_type = self.redis_instance.type(key)
+        output, message = None, ""
+
+        try :
+
+            if key_type == "str" :
+
+                if force_update :
+                    output = self.redis_instance.set(key ,data)
+
+                else :
+                    output = self.redis_instance.setnx(key, data)
+
+            elif key_type == "hash" :
+
+                if force_update :
+                    output = self.redis_instance.hset(key, field, data)
+
+                else :
+                    output = self.redis_instance.hsetnx(key, field, data)
+
+        except Exception as e :
+            message = e 
+
+        finally : 
+
+            return output, message
 
             
 
@@ -155,11 +180,15 @@ class Application(MiddleWare) :
 
         super().__init__(redis_instance)
     
-    def get_url(self, key: str) -> Optional[str] :
+    def data_get(self, key: str) -> Optional[str] :
         
         return self.fetch(key).extract()
     
-    def store_data(self, **kwargs) -> ProtocolObject :
+    def data_store(self, **kwargs) -> ProtocolObject :
+
+        if "url" not in kwargs :
+
+            return ProtocolObject("", messages="Input URL is empty.").extract()
 
         s = urlparse(kwargs["url"])
 
@@ -174,8 +203,28 @@ class Application(MiddleWare) :
         else :
             return self.store(kwargs["url"], dict(kwargs), required_hash=True).extract()
     
-    def pageview(self, key, field=None, incrby=1) :
-        return self.increment(key, field=field, incrby=incrby)
+    def pageview(self, key, incrby=1) :
+
+        current = int(datetime.datetime.now().strftime("%s"))
+        self.update(key, current, field="last_viewed", force_update=True)
+        return self.increment(key, field="pageview", incrby=incrby)
+
+    def client_history_update(self, key, data) :
+        
+        return self.store(key, [data])
+
+    def client_history_get(self, key, filters=(0, -1)) :
+
+        stats = []
+        history = json.loads(self.fetch(key, filters=filters).extract())["output"]
+        if history : 
+            for h in history :  
+                stat = json.loads(self.fetch(h).extract())["output"]
+                stat["key"] = h
+                stats.append(stat)
+        return ProtocolObject(stats).extract()
+    
+
 
 
 

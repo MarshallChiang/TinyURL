@@ -35,26 +35,36 @@ class SessionHandler(tornado.web.RequestHandler) :
 class MainHandler(SessionHandler) : 
 
     @tornado.web.authenticated
-    def get(self) :
+    def get(self) -> None:
         self.write(html_loader.load("main.html").generate())
 
     @tornado.web.authenticated
     def post(self) -> None :    
         data = json.loads(self.request.body)
         data.update(self.current_user)
-        result = json.loads(Application(redis).store_data(**data))
+        result = json.loads(Application(redis).data_store(**data))
         result["host"] = self.request.host
         self.write(json.dumps(result))
+        Application(redis).client_history_update(self.current_user["session_id"], result["output"])
+
+    
+class StatsHandler(SessionHandler) :
+    
+    def get(self) :
+        pagination = int(self.get_argument("page", 0))
+        limit = int(self.get_argument("limit", 5))
+        session_id = self.current_user["session_id"]
+        stats = Application(redis).client_history_get(session_id, filters=(limit*pagination, limit*(pagination+1)))
+        self.write(stats)
         
         
 class PatternRedirectHandler(SessionHandler) : 
 
-    @tornado.web.authenticated
     def get(self, path) -> None :
-        result = json.loads(Application(redis).get_url(path))
+        result = json.loads(Application(redis).data_get(path))
         if not result["message"] :
             self.redirect(result["output"]["url"])
-            Application(redis)
+            Application(redis).pageview(path)
         else :
             self.redirect("/error?err_msg=%s"%result["message"])
 
@@ -81,6 +91,7 @@ def make_app() :
         [
             (r"/", MainHandler),
             (r"/auth/(SignIn|SignUp)", SessionHandler),
+            (r"/stats", StatsHandler),
             (r"/(\w{"+os.environ["key_length"] + r"})", PatternRedirectHandler),
             (r"/error", ErrorHandler),
             (r"/static/(.*)", tornado.web.StaticFileHandler, {"path":os.path.join(os.path.dirname(__file__), 'static')})
