@@ -1,6 +1,6 @@
 ## Tiny URL 
 
-# structure 
+### structure 
 ```
 ├── server.py
 ├── static
